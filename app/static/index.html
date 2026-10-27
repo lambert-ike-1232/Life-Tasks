@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Life Tasks</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<aside id="sidebar">
+  <h1>Life Tasks</h1>
+  <nav id="workspaces"></nav>
+  <button id="new-workspace" class="ghost">+ Workspace</button>
+</aside>
+<main>
+  <header>
+    <button id="menu" class="ghost" aria-label="Menu">☰</button>
+    <div>
+      <div id="crumb"></div>
+      <h2 id="title">Loading…</h2>
+    </div>
+    <div class="spacer"></div>
+    <button id="rename-list" class="ghost" hidden>Rename</button>
+    <button id="delete-list" class="ghost danger" hidden>Delete list</button>
+  </header>
+  <form id="add-form">
+    <input id="add-title" placeholder="Add a task… (Enter to save)" autocomplete="off" required>
+    <select id="add-priority" aria-label="Priority">
+      <option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option>
+    </select>
+    <input id="add-due" type="date" aria-label="Due date">
+    <button type="submit">Add</button>
+  </form>
+  <section id="board">
+    <div class="column" data-status="todo"><h3>To do <span></span></h3><div class="cards"></div></div>
+    <div class="column" data-status="in_progress"><h3>In progress <span></span></h3><div class="cards"></div></div>
+    <div class="column" data-status="done"><h3>Done <span></span></h3><div class="cards"></div></div>
+  </section>
+</main>
+
+<dialog id="editor">
+  <form method="dialog" id="edit-form">
+    <input id="edit-title" required>
+    <textarea id="edit-notes" rows="4" placeholder="Notes"></textarea>
+    <div class="row">
+      <label>Status <select id="edit-status"><option value="todo">To do</option><option value="in_progress">In progress</option><option value="done">Done</option></select></label>
+      <label>Priority <select id="edit-priority"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+      <label>Due <input id="edit-due" type="date"></label>
+    </div>
+    <label>List <select id="edit-list"></select></label>
+    <div class="row actions">
+      <button type="button" id="edit-delete" class="ghost danger">Delete</button>
+      <div class="spacer"></div>
+      <button value="cancel" class="ghost" formnovalidate>Cancel</button>
+      <button value="save" id="edit-save">Save</button>
+    </div>
+  </form>
+</dialog>
+<script src="/static/app.js"></script>
+</body>
+</html>
