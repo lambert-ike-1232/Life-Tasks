@@ -18,6 +18,10 @@ uvicorn app.main:app --reload
 Data lives in `life_tasks.db` (SQLite). Set `DATABASE_URL` to use another database, e.g. Postgres when hosted.
 On first run it creates Personal (Shopping List, To Do), Toyota (To Do) and Agentic (To Do).
 
+## iPhone app
+
+`mobile/` is an Expo (React Native) app for this API: lists, an Upcoming view, quick add with `#list @workspace !high ^fri` shortcuts, and task editing. You can run it on your iPhone through Expo Go without a Mac; see [mobile/README.md](mobile/README.md).
+
 ## For the assistant
 
 **Quick add, by name.** Names are matched loosely (`"shopping"` finds "Shopping List"). If no workspace is given, the list is searched for across workspaces with Personal first. A list that doesn't exist yet is created.
@@ -58,5 +62,5 @@ pytest
 
 - User accounts (`Workspace.owner_id` is already in the schema)
 - Google Calendar sync for tasks with due dates (`Task.calendar_event_id` is reserved for it)
-- Hosting (Render / Fly.io with Postgres) so the assistant and phone can reach it
+- Hosting (Render / Fly.io with Postgres) so the assistant and the iPhone app can reach it from anywhere
 - MCP server wrapper so Claude-based assistants get the tools natively
