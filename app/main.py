@@ -3,17 +3,21 @@ from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from . import gcal
 from .db import get_session, init_db
 from .models import Status, Task, TaskList, Workspace, utcnow
 from .resolve import best_match, slugify
 from .schemas import (
+    GoogleStatus,
+    GoogleSyncResult,
     ListCreate,
     ListRead,
     ListUpdate,
@@ -89,6 +93,17 @@ def apply_status(task: Task, status: Status) -> None:
     task.completed_at = utcnow() if status == Status.done else None
 
 
+def resync(session: Session, tasks) -> None:
+    """Refresh calendar events whose text depends on a renamed or moved list/workspace."""
+    for t in tasks:
+        if t.calendar_event_id:
+            gcal.sync_task(session, t)
+
+
+def tasks_in_lists(session: Session, list_ids) -> list[Task]:
+    return session.exec(select(Task).where(Task.list_id.in_(list_ids))).all()
+
+
 def next_position(session: Session, list_id: int) -> float:
     top = session.exec(select(func.max(Task.position)).where(Task.list_id == list_id)).one()
     return (top or 0) + 1
@@ -123,6 +138,9 @@ def update_workspace(workspace_id: int, body: WorkspaceUpdate, session: Session 
     for k, v in data.items():
         setattr(ws, k, v)
     session.commit()
+    if "name" in data:
+        list_ids = session.exec(select(TaskList.id).where(TaskList.workspace_id == ws.id)).all()
+        resync(session, tasks_in_lists(session, list_ids))
     session.refresh(ws)
     return ws
 
@@ -167,12 +185,14 @@ def update_list(list_id: int, body: ListUpdate, session: Session = Depends(get_s
     for k, v in data.items():
         setattr(lst, k, v)
     session.commit()
+    resync(session, tasks_in_lists(session, [lst.id]))
     session.refresh(lst)
     return list_read(session, lst)
 
 
 def _delete_list(session: Session, lst: TaskList) -> None:
     for t in session.exec(select(Task).where(Task.list_id == lst.id)).all():
+        gcal.remove_task(session, t)
         session.delete(t)
     session.delete(lst)
 
@@ -221,6 +241,7 @@ def create_task(list_id: int, body: TaskCreate, session: Session = Depends(get_s
     apply_status(task, body.status)
     session.add(task)
     session.commit()
+    gcal.sync_task(session, task)
     session.refresh(task)
     return task_read(session, task)
 
@@ -242,13 +263,16 @@ def update_task(task_id: int, body: TaskUpdate, session: Session = Depends(get_s
         setattr(task, k, v)
     task.updated_at = utcnow()
     session.commit()
+    gcal.sync_task(session, task)
     session.refresh(task)
     return task_read(session, task)
 
 
 @api.delete("/tasks/{task_id}", status_code=204, tags=["tasks"])
 def delete_task(task_id: int, session: Session = Depends(get_session)):
-    session.delete(get_or_404(session, Task, task_id))
+    task = get_or_404(session, Task, task_id)
+    gcal.remove_task(session, task)
+    session.delete(task)
     session.commit()
 
 
@@ -292,6 +316,7 @@ def quick_add(body: QuickAdd, session: Session = Depends(get_session)):
     )
     session.add(task)
     session.commit()
+    gcal.sync_task(session, task)
     session.refresh(task)
     msg = f"Added '{task.title}' to {ws.name} > {lst.name}" + (" (new list)" if created_list else "")
     return QuickAddResult(task=task_read(session, task), created_list=created_list, message=msg)
@@ -319,6 +344,70 @@ def overview(include_done: bool = False, session: Session = Depends(get_session)
             )
         out.append({"id": ws.id, "name": ws.name, "lists": lists})
     return out
+
+
+# --- Google Calendar -------------------------------------------------------
+
+
+def google_redirect_uri(request: Request) -> str:
+    # Must match an "Authorized redirect URI" on the Google OAuth client exactly.
+    return os.environ.get("GOOGLE_REDIRECT_URI") or str(request.url_for("google_callback"))
+
+
+@api.get("/google/status", response_model=GoogleStatus, tags=["google calendar"])
+def google_status(session: Session = Depends(get_session)):
+    account = gcal.get_account(session)
+    return GoogleStatus(
+        configured=gcal.configured(),
+        connected=account is not None,
+        email=account.email if account else None,
+        calendar_id=account.calendar_id if account else None,
+    )
+
+
+@api.get("/google/connect", tags=["google calendar"])
+def google_connect(request: Request):
+    """Returns the Google consent URL. Open it in a browser; Google sends the
+    user back to /google/callback, which stores the tokens and syncs every task."""
+    if not gcal.configured():
+        raise HTTPException(400, "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first (see docs/google-calendar.md)")
+    return {"auth_url": gcal.auth_url(google_redirect_uri(request))}
+
+
+@api.post("/google/sync", response_model=GoogleSyncResult, tags=["google calendar"])
+def google_sync(session: Session = Depends(get_session)):
+    """Push every task with a due date to the calendar, e.g. after an outage."""
+    if not gcal.get_account(session):
+        raise HTTPException(409, "Google Calendar is not connected")
+    return gcal.sync_all(session)
+
+
+@api.delete("/google", status_code=204, tags=["google calendar"])
+def google_disconnect(session: Session = Depends(get_session)):
+    """Forget the Google account. Existing calendar events are left in place."""
+    gcal.disconnect(session)
+
+
+@app.get("/google/callback", include_in_schema=False)
+def google_callback(
+    request: Request,
+    code: Optional[str] = None,
+    state: str = "",
+    error: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    # Outside /api: Google redirects the browser here, so there is no API key
+    # header. The signed state proves the flow started from /api/google/connect.
+    if error:
+        return RedirectResponse(f"/?google=error&reason={quote(error)}")
+    if not gcal.configured() or not code or not gcal.check_state(state):
+        raise HTTPException(400, "Invalid or expired Google sign-in; start again from the board")
+    try:
+        gcal.connect(session, code, google_redirect_uri(request))
+    except gcal.GoogleError as e:
+        raise HTTPException(502, str(e))
+    gcal.sync_all(session)
+    return RedirectResponse("/?google=connected")
 
 
 app.include_router(api)

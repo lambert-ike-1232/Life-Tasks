@@ -70,6 +70,7 @@ class TaskRead(SQLModel):
     priority: Priority
     due_date: Optional[date]
     position: float
+    calendar_event_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime]
@@ -94,3 +95,15 @@ class QuickAddResult(SQLModel):
     task: TaskRead
     created_list: bool
     message: str
+
+
+class GoogleStatus(SQLModel):
+    configured: bool = Field(description="GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set")
+    connected: bool
+    email: Optional[str] = None
+    calendar_id: Optional[str] = None
+
+
+class GoogleSyncResult(SQLModel):
+    synced: int
+    failed: int

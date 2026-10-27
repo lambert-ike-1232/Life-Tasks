@@ -27,6 +27,9 @@ input, select, textarea { background: var(--panel); border: 1px solid var(--line
 .list-link:hover { background: var(--col); }
 .list-link.active { background: var(--col); font-weight: 600; }
 .list-link .count { color: var(--muted); font-size: 12px; }
+#gcal { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 12px; }
+#gcal-status { color: var(--muted); font-size: 12px; padding: 0 8px 8px; overflow-wrap: anywhere; }
+#gcal .row { padding: 0 4px; gap: 4px; }
 
 main { flex: 1; min-width: 0; padding: 16px 24px; }
 header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
