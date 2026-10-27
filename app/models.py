@@ -2,8 +2,9 @@
 
 Hierarchy: Workspace -> TaskList -> Task.
 
-`owner_id` and the calendar fields are placeholders for the planned user
-accounts and calendar sync; nothing reads them yet.
+`owner_id` is a placeholder for the planned user accounts; nothing reads it yet.
+`Task.calendar_event_id` and `GoogleAccount` belong to the Google Calendar sync
+in gcal.py.
 """
 
 from datetime import date, datetime, timezone
@@ -55,8 +56,19 @@ class Task(SQLModel, table=True):
     priority: Priority = Priority.medium
     due_date: Optional[date] = None
     position: float = 0
-    # future: calendar sync
     calendar_event_id: Optional[str] = None
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
     completed_at: Optional[datetime] = None
+
+
+class GoogleAccount(SQLModel, table=True):
+    """The connected Google account. One row at most until user accounts exist."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: Optional[str] = None
+    refresh_token: str
+    access_token: Optional[str] = None
+    token_expires_at: float = 0  # unix time
+    calendar_id: str = "primary"
+    created_at: datetime = Field(default_factory=utcnow)

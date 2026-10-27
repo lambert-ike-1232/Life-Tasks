@@ -83,6 +83,7 @@ function renderBoard() {
         meta.appendChild(s);
       }
       if (t.notes) meta.append("📝");
+      if (t.calendar_event_id) meta.append("📅");
       card.ondragstart = (e) => { e.dataTransfer.setData("text/plain", t.id); card.classList.add("dragging"); };
       card.ondragend = () => card.classList.remove("dragging");
       card.onclick = () => openEditor(t);
@@ -190,10 +191,38 @@ $("#delete-list").onclick = async () => {
   if (first) selectList(first.id);
 };
 
+async function loadGoogle() {
+  const g = await api("/google/status");
+  $("#gcal").hidden = false;
+  $("#gcal-status").textContent = !g.configured
+    ? "Not set up yet. See docs/google-calendar.md."
+    : g.connected ? `Syncing tasks with due dates to ${g.email || "your calendar"}` : "Tasks with due dates can appear in your calendar.";
+  $("#gcal-connect").hidden = !g.configured || g.connected;
+  $("#gcal-sync").hidden = $("#gcal-disconnect").hidden = !g.connected;
+}
+
+$("#gcal-connect").onclick = async () => {
+  try { location.href = (await api("/google/connect")).auth_url; } catch (err) { alert(err.message); }
+};
+$("#gcal-sync").onclick = async () => {
+  const r = await api("/google/sync", { method: "POST" });
+  alert(`Synced ${r.synced} task(s)` + (r.failed ? `, ${r.failed} failed (check the server log)` : ""));
+  if (state.current) await loadTasks();
+};
+$("#gcal-disconnect").onclick = async () => {
+  if (!confirm("Stop syncing to Google Calendar? Events already created stay in your calendar.")) return;
+  await api("/google", { method: "DELETE" });
+  await loadGoogle();
+};
+
 $("#menu").onclick = () => document.body.classList.toggle("menu-open");
 
 (async () => {
+  const params = new URLSearchParams(location.search);
+  if (params.get("google") === "error") alert("Google sign-in was cancelled or failed: " + params.get("reason"));
+  if (params.has("google")) history.replaceState(null, "", "/");
   await loadSidebar();
+  loadGoogle();
   const saved = Number(localStorage.getItem("currentList"));
   const first = state.workspaces.flatMap((w) => state.lists[w.id])[0];
   selectList(findList(saved) ? saved : first?.id);

@@ -47,6 +47,10 @@ Mark a task done with `PATCH /api/tasks/{id}` and `{"status": "done"}`; move it 
 
 **Auth.** Set `LIFE_TASKS_API_KEY` and every `/api` call must send it in an `X-API-Key` header (the web UI asks for it once). This is a stand-in until real accounts exist.
 
+## Google Calendar
+
+Tasks with due dates show up in your Google Calendar as all-day events, and stay in step as you edit, finish or delete them. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then click **Connect** at the bottom of the sidebar. The one-time Google Cloud setup is in [docs/google-calendar.md](docs/google-calendar.md).
+
 ## Tests
 
 ```bash
@@ -57,6 +61,5 @@ pytest
 ## Roadmap
 
 - User accounts (`Workspace.owner_id` is already in the schema)
-- Google Calendar sync for tasks with due dates (`Task.calendar_event_id` is reserved for it)
 - Hosting (Render / Fly.io with Postgres) so the assistant and phone can reach it
 - MCP server wrapper so Claude-based assistants get the tools natively
